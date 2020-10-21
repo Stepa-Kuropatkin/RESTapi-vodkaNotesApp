@@ -1,0 +1,170 @@
+import 'package:flutter/material.dart';
+import 'package:get_it/get_it.dart';
+import 'package:testREST/models/api_responce.dart';
+import 'package:testREST/models/note_for_listing.dart';
+import 'package:testREST/services/notes_service.dart';
+
+import 'note_delete.dart';
+import 'note_modify.dart';
+
+class NoteList extends StatefulWidget {
+  @override
+  _NoteListState createState() => _NoteListState();
+}
+
+class _NoteListState extends State<NoteList> {
+  NotesService get service => GetIt.I<NotesService>();
+
+  APIResponce<List<NoteForListing>> _apiResponse;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    _fetchNotes();
+    super.initState();
+  }
+
+  _fetchNotes() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    _apiResponse = await service.getNotesList();
+
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('List of Notes'),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.of(context)
+              .push(
+            MaterialPageRoute(
+              builder: (_) => NotesMotify(),
+            ),
+          )
+              .then((_) {
+            _fetchNotes();
+          });
+        },
+        child: Icon(Icons.add),
+      ),
+      body: Builder(
+        builder: (_) {
+          if (_isLoading) {
+            return Center(child: CircularProgressIndicator());
+          }
+          if (_apiResponse.error) {
+            return Center(
+              child: Text(_apiResponse.errorMessage),
+            );
+          }
+          return ListView.separated(
+              itemBuilder: (_, index) {
+                return Dismissible(
+                  key: ValueKey(_apiResponse.data[index].id),
+                  direction: DismissDirection.startToEnd,
+                  onDismissed: (direction) {},
+                  confirmDismiss: (direction) async {
+                    final result = await showDialog(
+                      context: context,
+                      builder: (_) => NoteDelete(),
+                    );
+
+                    if (result) {
+                      final delteResult =
+                          await service.deleteNote(_apiResponse.data[index].id);
+
+                      var message;
+                      if (delteResult != null && delteResult.data == true) {
+                        message = 'the note was deleted';
+                      } else {
+                        message =
+                            delteResult?.errorMessage ?? 'An error occured';
+                      }
+
+                      showDialog(
+                        context: context,
+                        builder: (_) => AlertDialog(
+                          title: Text('Done'),
+                          content: Text(message),
+                          actions: [
+                            FlatButton(
+                              child: Text('Ok'),
+                              onPressed: () {
+                                Navigator.of(context).pop();
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+
+                      return delteResult?.data ?? false;
+                    }
+                    return result;
+                  },
+                  background: Container(
+                    color: Colors.red,
+                    padding: EdgeInsets.only(left: 16),
+                    child: Align(
+                        child: Icon(Icons.delete, color: Colors.white),
+                        alignment: Alignment.centerLeft),
+                  ),
+                  child: Container(
+                    child: Column(
+                      children: [
+                        ListTile(
+                          title: Text(
+                            'Name: ${_apiResponse.data[index].name}',
+                            style: TextStyle(
+                                color: Theme.of(context).primaryColor),
+                          ),
+                          subtitle: Text(
+                              'Review: ${_apiResponse.data[index].review}'),
+                          onTap: () {
+                            Navigator.of(context)
+                                .push(
+                              MaterialPageRoute(
+                                builder: (_) => NotesMotify(
+                                    id: _apiResponse.data[index].id),
+                              ),
+                            )
+                                .then((data) {
+                              _fetchNotes();
+                            });
+                          },
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 16, right: 16),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                  'Degree: ${_apiResponse.data[index].degree}'),
+                              Text(
+                                  'Amount: ${_apiResponse.data[index].amount}'),
+                              Text(
+                                  'Spirit: ${_apiResponse.data[index].spirit}'),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+              separatorBuilder: (_, __) =>
+                  Divider(height: 1, color: Colors.green),
+              itemCount: _apiResponse.data.length);
+        },
+      ),
+    );
+  }
+}
